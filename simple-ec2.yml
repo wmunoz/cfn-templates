@@ -1,0 +1,48 @@
+AWSTemplateFormatVersion: 2010-09-09
+Description: A simple EC2 instance based on Amazon linux 2018.03
+
+Parameters:
+  FilePath:
+    Description: The path of a test file to be written by UseData.
+    Type: String
+    Default: /home/ec2-user/userdata
+  User:
+    Description: User name of the person that is creating this instance
+    Type: String
+  MyInstanceType: 
+    Type: String
+    Default: t2.micro
+    AllowedValues: 
+      - t2.micro
+      - m1.small
+    Description: Enter t2.micro, m1.small. Default is t2.micro.
+  MyKeyPair: 
+    Type: AWS::EC2::KeyPair::KeyName 
+    Description: The name of your ssh keypair
+
+Resources:
+  MyEC2Instance: 
+    Type: AWS::EC2::Instance
+    Properties: 
+      ImageId: ami-06e710681e5ee07aa # This  amazon linux 2018.03 in us-west-1
+      InstanceType:
+        Ref: MyInstanceType
+      KeyName: 
+        Ref: MyKeyPair
+      Tags:                    
+       - Key: Name             
+         Value: !Sub |
+          - Test EC2 Instance created by ${User}
+      BlockDeviceMappings:
+        -
+          DeviceName: /dev/sdm
+          Ebs:
+            VolumeType: ebs
+            Iops: 200
+            DeleteOnTermination: true
+            VolumeSize: 20
+      UserData:
+        Fn::Base64: !Sub |
+          #!/bin/bash
+          echo "Testing Userdata Wmunoz" > ${FilePath}
+          chown ec2-user.ec2-user ${FilePath}

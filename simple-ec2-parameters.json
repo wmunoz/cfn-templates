@@ -1,0 +1,10 @@
+[
+  {
+    "ParameterKey": "MyKeyPair",
+    "ParameterValue": "wmunoz-dev"
+  }, 
+  {
+    "ParameterKey": "User",
+    "ParameterValue": "wmunoz"
+  }
+]
