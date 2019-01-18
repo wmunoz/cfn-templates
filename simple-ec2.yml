@@ -1,48 +1,103 @@
-AWSTemplateFormatVersion: 2010-09-09
-Description: A simple EC2 instance based on Amazon linux 2018.03
+AWSTemplateFormatVersion: '2010-09-09'
+Description: This template describes a single EC2 instance inside a VPC with a route table and SG to access internet
 
 Parameters:
-  FilePath:
-    Description: The path of a test file to be written by UseData.
+  vpcCidrBlock:
+    Description: VPC cidr range
     Type: String
-    Default: /home/ec2-user/userdata
-  User:
-    Description: User name of the person that is creating this instance
+    Default: 192.168.0.0/16
+
+  subnetCidrBlock:
+    Description: subnet cidr range
     Type: String
-  MyInstanceType: 
-    Type: String
-    Default: t2.micro
-    AllowedValues: 
-      - t2.micro
-      - m1.small
-    Description: Enter t2.micro, m1.small. Default is t2.micro.
-  MyKeyPair: 
+    Default: 192.168.0.0/16
+
+  myKeyPair: 
     Type: AWS::EC2::KeyPair::KeyName 
     Description: The name of your ssh keypair
 
 Resources:
-  MyEC2Instance: 
+  myVPC:
+    Type: AWS::EC2::VPC
+    Properties:
+      CidrBlock:
+        Ref: vpcCidrBlock
+
+  myPublicSubnet:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId:
+        Ref: myVPC
+      CidrBlock:
+        Ref: subnetCidrBlock
+      MapPublicIpOnLaunch: true
+
+  myInternetGateway:
+    Type: AWS::EC2::InternetGateway
+  
+  myAttachGateway:
+    Type: AWS::EC2::VPCGatewayAttachment
+    Properties:
+      VpcId:
+        Ref: myVPC
+      InternetGatewayId:
+        Ref: myInternetGateway
+  
+  myPublicRouteTable:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId:
+        Ref: myVPC
+
+  myRoute:
+    Type: AWS::EC2::Route
+    DependsOn: myInternetGateway
+    Properties:
+      RouteTableId:
+        Ref: myPublicRouteTable
+      DestinationCidrBlock: 0.0.0.0/0
+      GatewayId:
+        Ref: myInternetGateway
+
+  mySubnetRouteTableAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      SubnetId:
+        Ref: myPublicSubnet
+      RouteTableId:
+        Ref: myPublicRouteTable
+
+  mySecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      VpcId: !Ref myVPC
+      GroupDescription: Enable SSH access via port 22
+      SecurityGroupIngress:
+      - IpProtocol: tcp
+        FromPort: 80
+        ToPort: 80
+        CidrIp: 0.0.0.0/0
+      - IpProtocol: tcp
+        FromPort: 22
+        ToPort: 22
+        CidrIp: 0.0.0.0/0
+      SecurityGroupEgress:
+      - IpProtocol: tcp
+        FromPort: 1
+        ToPort: 65535
+        CidrIp: 0.0.0.0/0
+
+  myEC2Instance: 
     Type: AWS::EC2::Instance
-    Properties: 
-      ImageId: ami-06e710681e5ee07aa # This  amazon linux 2018.03 in us-west-1
-      InstanceType:
-        Ref: MyInstanceType
+    Properties:
+      ImageId: ami-0bdb828fd58c52235 # This  amazon linux 2018.03 in us-west-1
+      InstanceType: t2.micro
       KeyName: 
-        Ref: MyKeyPair
-      Tags:                    
-       - Key: Name             
-         Value: !Sub |
-          - Test EC2 Instance created by ${User}
-      BlockDeviceMappings:
-        -
-          DeviceName: /dev/sdm
-          Ebs:
-            VolumeType: ebs
-            Iops: 200
-            DeleteOnTermination: true
-            VolumeSize: 20
-      UserData:
-        Fn::Base64: !Sub |
-          #!/bin/bash
-          echo "Testing Userdata Wmunoz" > ${FilePath}
-          chown ec2-user.ec2-user ${FilePath}
+        Ref: myKeyPair
+      SubnetId:
+        Ref: myPublicSubnet
+      SecurityGroupIds: [!Ref mySecurityGroup]
+
+Outputs:
+  myEC2InstancePublicIP:
+    Value: !GetAtt myEC2Instance.PublicIp
