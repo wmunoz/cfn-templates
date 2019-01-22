@@ -1,0 +1,166 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: ECS cluster with a single app
+
+Parameters:
+  vpcCidrBlock:
+    Description: VPC cidr range
+    Type: String
+    Default: 192.168.0.0/16
+
+  subnetACidrBlock:
+    Description: subnet cidr range
+    Type: String
+    Default: 192.168.0.0/24
+
+  subnetBCidrBlock:
+    Description: subnet cidr range
+    Type: String
+    Default: 192.168.1.0/24
+
+  myKeyPair: 
+    Type: AWS::EC2::KeyPair::KeyName 
+    Description: The name of your ssh keypair
+
+Resources:
+  myVPC:
+    Type: AWS::EC2::VPC
+    Properties:
+      CidrBlock:
+        Ref: vpcCidrBlock
+
+  mySubnetA:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId:
+        Ref: myVPC
+      CidrBlock:
+        Ref: subnetACidrBlock
+      MapPublicIpOnLaunch: true
+
+  mySubnetB:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId:
+        Ref: myVPC
+      CidrBlock:
+        Ref: subnetBCidrBlock
+      MapPublicIpOnLaunch: true
+
+  myInternetGateway:
+    Type: AWS::EC2::InternetGateway
+  
+  myAttachGateway:
+    Type: AWS::EC2::VPCGatewayAttachment
+    Properties:
+      VpcId:
+        Ref: myVPC
+      InternetGatewayId:
+        Ref: myInternetGateway
+  
+  myPublicRouteTable:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId:
+        Ref: myVPC
+
+  myRoute:
+    Type: AWS::EC2::Route
+    DependsOn: myInternetGateway
+    Properties:
+      RouteTableId:
+        Ref: myPublicRouteTable
+      DestinationCidrBlock: 0.0.0.0/0
+      GatewayId:
+        Ref: myInternetGateway
+
+  mySubnetARouteTableAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      SubnetId:
+        Ref: mySubnetA
+      RouteTableId:
+        Ref: myPublicRouteTable
+
+
+  mySubnetBRouteTableAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      SubnetId:
+        Ref: mySubnetB
+      RouteTableId:
+        Ref: myPublicRouteTable
+
+  mySecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      VpcId: !Ref myVPC
+      GroupDescription: Enable SSH access via port 22
+      SecurityGroupIngress:
+      - IpProtocol: tcp
+        FromPort: 80
+        ToPort: 80
+        CidrIp: 0.0.0.0/0
+      - IpProtocol: tcp
+        FromPort: 22
+        ToPort: 22
+        CidrIp: 0.0.0.0/0
+      - IpProtocol: tcp
+        FromPort: 3000
+        ToPort: 3000
+        CidrIp: 0.0.0.0/0
+      SecurityGroupEgress:
+      - IpProtocol: tcp
+        FromPort: 1
+        ToPort: 65535
+        CidrIp: 0.0.0.0/0
+
+  myECSCluster:
+    Type: AWS::ECS::Cluster
+    Properties:
+      ClusterName:  app-stack-main
+
+  myECSAutoScalingGroup:
+    Type: AWS::AutoScaling::AutoScalingGroup
+    Properties:
+      VPCZoneIdentifier: [ 
+        !Ref mySubnetA, 
+        !Ref mySubnetB
+      ]
+      LaunchConfigurationName: 
+        !Ref ContainerHostInstances
+      MinSize: 1
+      MaxSize: 4
+      DesiredCapacity: 1
+      Tags:
+        - Key: Name
+          Value: app-stack-ecs
+          PropagateAtLaunch: true
+    CreationPolicy:
+      ResourceSignal:
+        Timeout: PT5M
+    UpdatePolicy:
+      AutoScalingReplacingUpdate:
+        WillReplace: true
+
+  ContainerHostInstances:
+    Type: AWS::AutoScaling::LaunchConfiguration
+    Properties: 
+      ImageId: ami-03a86880c9c6880ac
+      SecurityGroups: [ !Ref mySecurityGroup ]
+      InstanceType: t2.medium
+      IamInstanceProfile: !Ref ECSHostEC2InstanceProfile
+      KeyName: wmunoz-dev
+      UserData:
+        Fn::Base64:
+          !Sub |
+            #!/bin/bash -xe
+            echo ECS_CLUSTER=${myECSCluster} >> /etc/ecs/ecs.config
+            yum install -y aws-cfn-bootstrap
+            /opt/aws/bin/cfn-signal -e $? --stack ${AWS::StackName} --resource myECSAutoScalingGroup --region ${AWS::Region}
+
+
+  ECSHostEC2InstanceProfile:
+    Type: AWS::IAM::InstanceProfile
+    Properties: 
+      Path: /
+      Roles: [ ecsInstanceRole ]
