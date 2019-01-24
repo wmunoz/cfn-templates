@@ -1,4 +1,4 @@
-AWSTemplateFormatVersion: '2010-09-09'
+ AWSTemplateFormatVersion: '2010-09-09'
 Description: ECS cluster with a single app
 
 Parameters:
@@ -130,7 +130,7 @@ Resources:
         !Ref ContainerHostInstances
       MinSize: 1
       MaxSize: 4
-      DesiredCapacity: 1
+      DesiredCapacity: 2
       Tags:
         - Key: Name
           Value: app-stack-ecs
@@ -164,3 +164,38 @@ Resources:
     Properties: 
       Path: /
       Roles: [ ecsInstanceRole ]
+
+  myEmailSenderService:
+    Type: AWS::ECS::Service
+    Properties:
+      Cluster: !Ref myECSCluster
+      DesiredCount: 2
+      DeploymentConfiguration:
+        MinimumHealthyPercent: 50
+      TaskDefinition: !Ref myEmailSenderTask
+
+  myEmailSenderTask:
+    Type: AWS::ECS::TaskDefinition
+    Properties:
+      Family: app-stack-email-sender
+      ContainerDefinitions:
+      - Name: simple-app
+        Cpu: 10
+        Essential: true
+        Image: httpd:2.4
+        Memory: '300'
+        LogConfiguration:
+            LogDriver: awslogs
+            Options:
+              awslogs-group: !Ref myEmailSenderLogsGroup
+              awslogs-region: !Ref AWS::Region
+              awslogs-stream-prefix: email-sender
+              awslogs-datetime-format: '%Y-%m-%d %H:%M:%S.%L'
+        PortMappings: 
+          - ContainerPort: 8080
+
+  myEmailSenderLogsGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: app-stack-email-sender
+      RetentionInDays: 14
