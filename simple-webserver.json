@@ -1,0 +1,18 @@
+[
+  {
+    "ParameterKey": "KeyName",
+    "ParameterValue": "wmunoz-dev"
+  },
+  {
+    "ParameterKey": "InstanceType",
+    "ParameterValue": "t2.micro"
+  },
+  {
+    "ParameterKey": "OperatorEMail",
+    "ParameterValue": "wmunoz@alertlogic.com"
+  },
+  {
+    "ParameterKey": "SSHLocation",
+    "ParameterValue": "181.143.226.148/32"
+  }
+]
